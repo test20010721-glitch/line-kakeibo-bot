@@ -109,6 +109,8 @@ def callback():
 
     return "OK"
 
-@app.route("/")
-def home():
+from flask import request
+
+@app.route("/callback", methods=["POST"])
+def callback():
     return "OK"
