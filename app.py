@@ -108,9 +108,3 @@ def callback():
         line_bot_api.reply_message(reply_token, TextSendMessage(text=HELP))
 
     return "OK"
-
-from flask import request
-
-@app.route("/callback", methods=["POST"])
-def callback():
-    return "OK"
