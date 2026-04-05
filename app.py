@@ -20,7 +20,7 @@ scope = [
 
 #creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 #client = gspread.authorize(creds)
-sheet = client.open("家計簿").sheet1
+#sheet = client.open("家計簿").sheet1
 
 HELP = """📊 家計簿BOT
 
