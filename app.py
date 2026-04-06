@@ -66,7 +66,7 @@ def handle_message(event):
 ランチ 800
 
 【収入】
-+50000
+給料 +200000
 
 【確認】
 今月 / 3月
@@ -116,7 +116,7 @@ def handle_message(event):
 
             balance = total_in - total_out
 
-            # ±表示
+            # ＋−表示
             if balance >= 0:
                 balance_text = f"+{balance}"
             else:
@@ -174,16 +174,23 @@ def handle_message(event):
         new_id = len(data)
         today_str = str(today)
 
-        # 収入
-        if text.startswith("+"):
-            amount = text.replace("+", "")
-            content = "収入"
-            type_ = "収入"
+        parts = text.split(" ")
 
-        # 支出
+        if len(parts) != 2:
+            raise Exception()
+
+        content = parts[0]
+        amount = parts[1]
+
+        # 収入判定
+        if amount.startswith("+"):
+            amount = amount.replace("+", "")
+            type_ = "収入"
         else:
-            content, amount = text.split(" ")
             type_ = "支出"
+
+        if not amount.isdigit():
+            raise Exception()
 
         sheet.append_row([
             str(new_id),
@@ -198,4 +205,4 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
     except:
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="入力形式が違うよ！"))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="入力形式エラー：ランチ 800 / 給料 +200000"))
