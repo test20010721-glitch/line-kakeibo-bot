@@ -61,6 +61,9 @@ def handle_message(event):
 【収入】
 給料 +200000
 
+【月指定】
+4月 ランチ 800
+
 【複数登録】
 ランチ 800
 カフェ 500
@@ -143,7 +146,7 @@ def handle_message(event):
 
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除完了 👍"))
         except:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除 1 3 5 の形式で入力"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除 1 3 5"))
         return
 
     # ===== 複数変更 =====
@@ -169,7 +172,7 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="変更 1 1000 3 2000"))
         return
 
-    # ===== 複数登録 =====
+    # ===== 登録（完全版：月指定＋複数）=====
     try:
         lines = text.split("\n")
         data = sheet.get_all_values()
@@ -180,11 +183,21 @@ def handle_message(event):
         for line in lines:
             parts = line.split(" ")
 
-            if len(parts) != 2:
-                continue
+            # 月指定
+            if len(parts) == 3 and parts[0].endswith("月"):
+                month = int(parts[0].replace("月", ""))
+                content = parts[1]
+                amount = parts[2]
+                date_str = f"{today.year}-{month:02d}-01"
 
-            content = parts[0]
-            amount = parts[1]
+            # 通常
+            elif len(parts) == 2:
+                content = parts[0]
+                amount = parts[1]
+                date_str = str(today)
+
+            else:
+                continue
 
             if amount.startswith("+"):
                 amount = amount.replace("+", "")
@@ -197,7 +210,7 @@ def handle_message(event):
 
             sheet.append_row([
                 str(start_id + count),
-                str(today),
+                date_str,
                 content,
                 amount,
                 type_,
