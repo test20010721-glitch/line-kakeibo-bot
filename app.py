@@ -106,7 +106,7 @@ def handle_message(event):
                     amount = int(row[3])
                     type_ = row[4]
 
-                    line = f"{id_}. {content} {amount}円"
+                    line = f"{id_}. {content} {amount:,}円"
 
                     if type_ == "収入":
                         income_lines.append(line)
@@ -116,13 +116,15 @@ def handle_message(event):
                         total_out += amount
 
             balance = total_in - total_out
-            balance_text = f"+{balance}" if balance >= 0 else str(balance)
+            balance_text = f"+{balance:,}" if balance >= 0 else f"{balance:,}"
 
             msg = f"【{target_month}月】\n"
             msg += "\nー支出ー\n" + ("\n".join(expense_lines) if expense_lines else "なし")
             msg += "\n\nー収入ー\n" + ("\n".join(income_lines) if income_lines else "なし")
             msg += "\n\nー総計ー\n"
-            msg += f"収入：{total_in}円\n支出：{total_out}円\n収支：{balance_text}円"
+            msg += f"収入：{total_in:,}円\n"
+            msg += f"支出：{total_out:,}円\n"
+            msg += f"収支：{balance_text}円"
 
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         except:
@@ -135,7 +137,6 @@ def handle_message(event):
             ids = text.split()[1:]
             data = sheet.get_all_values()
 
-            # 下から削除（ズレ防止）
             for i in reversed(range(len(data))):
                 if data[i] and data[i][0] in ids:
                     sheet.delete_rows(i + 1)
@@ -205,7 +206,13 @@ def handle_message(event):
 
             count += 1
 
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"{count}件登録 👍"))
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=f"{count}件登録 👍")
+        )
 
     except:
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="入力エラー"))
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="入力エラー")
+        )
