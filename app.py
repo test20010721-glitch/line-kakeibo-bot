@@ -3,25 +3,22 @@ import os
 import datetime
 import json
 
-# Google Sheets
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# LINE
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import TextSendMessage, MessageEvent
 from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# ===== LINE設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# ===== Google Sheets設定 =====
+# ===== Google Sheets =====
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
@@ -30,15 +27,12 @@ scope = [
 creds_dict = json.loads(os.environ.get("GOOGLE_CREDENTIALS"))
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
-
 sheet = client.open("家計簿").sheet1
 
-# ===== 動作確認 =====
 @app.route("/")
 def home():
     return "OK"
 
-# ===== Webhook =====
 @app.route("/callback", methods=["POST"])
 def callback():
     signature = request.headers.get("X-Line-Signature")
@@ -51,7 +45,6 @@ def callback():
 
     return "OK"
 
-# ===== メイン処理 =====
 @handler.add(MessageEvent)
 def handle_message(event):
     text = event.message.text.strip()
@@ -68,14 +61,18 @@ def handle_message(event):
 【収入】
 給料 +200000
 
+【複数登録】
+ランチ 800
+カフェ 500
+
 【確認】
 今月 / 3月
 
 【削除】
-削除 1
+削除 1 3 5
 
 【変更】
-変更 1 500
+変更 1 1000 3 2000
 """
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
@@ -92,7 +89,9 @@ def handle_message(event):
 
             total_in = 0
             total_out = 0
-            msg = f"【{target_month}月】\n"
+
+            expense_lines = []
+            income_lines = []
 
             for row in data:
                 if len(row) < 5:
@@ -107,102 +106,106 @@ def handle_message(event):
                     amount = int(row[3])
                     type_ = row[4]
 
-                    msg += f"{id_}. {content} {amount}円\n"
+                    line = f"{id_}. {content} {amount}円"
 
                     if type_ == "収入":
+                        income_lines.append(line)
                         total_in += amount
                     else:
+                        expense_lines.append(line)
                         total_out += amount
 
             balance = total_in - total_out
+            balance_text = f"+{balance}" if balance >= 0 else str(balance)
 
-            # ＋−表示
-            if balance >= 0:
-                balance_text = f"+{balance}"
-            else:
-                balance_text = f"{balance}"
-
-            msg += f"\n収入：{total_in}円"
-            msg += f"\n支出：{total_out}円"
-            msg += f"\n収支：{balance_text}円"
+            msg = f"【{target_month}月】\n"
+            msg += "\nー支出ー\n" + ("\n".join(expense_lines) if expense_lines else "なし")
+            msg += "\n\nー収入ー\n" + ("\n".join(income_lines) if income_lines else "なし")
+            msg += "\n\nー総計ー\n"
+            msg += f"収入：{total_in}円\n支出：{total_out}円\n収支：{balance_text}円"
 
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         except:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="3月 の形式で入力してね"))
         return
 
-    # ===== 削除 =====
+    # ===== 複数削除 =====
     if text.startswith("削除"):
         try:
-            target_id = text.split(" ")[1]
+            ids = text.split()[1:]
             data = sheet.get_all_values()
 
-            for i, row in enumerate(data):
-                if row and row[0] == target_id:
+            # 下から削除（ズレ防止）
+            for i in reversed(range(len(data))):
+                if data[i] and data[i][0] in ids:
                     sheet.delete_rows(i + 1)
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除しました 👍"))
-                    return
 
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="IDが見つからないよ"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除完了 👍"))
         except:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除 1 の形式で入力してね"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="削除 1 3 5 の形式で入力"))
         return
 
-    # ===== 変更 =====
+    # ===== 複数変更 =====
     if text.startswith("変更"):
         try:
-            parts = text.split(" ")
-            target_id = parts[1]
-            new_amount = parts[2]
+            parts = text.split()[1:]
+
+            if len(parts) % 2 != 0:
+                raise Exception()
 
             data = sheet.get_all_values()
 
-            for i, row in enumerate(data):
-                if row and row[0] == target_id:
-                    sheet.update_cell(i + 1, 4, new_amount)
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="変更しました 👍"))
-                    return
+            for i in range(0, len(parts), 2):
+                target_id = parts[i]
+                new_amount = parts[i+1]
 
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="IDが見つからないよ"))
+                for row_index, row in enumerate(data):
+                    if row and row[0] == target_id:
+                        sheet.update_cell(row_index + 1, 4, new_amount)
+
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="変更完了 👍"))
         except:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="変更 1 500 の形式で入力してね"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="変更 1 1000 3 2000"))
         return
 
-    # ===== 登録 =====
+    # ===== 複数登録 =====
     try:
+        lines = text.split("\n")
         data = sheet.get_all_values()
-        new_id = len(data)
-        today_str = str(today)
+        start_id = len(data)
 
-        parts = text.split(" ")
+        count = 0
 
-        if len(parts) != 2:
-            raise Exception()
+        for line in lines:
+            parts = line.split(" ")
 
-        content = parts[0]
-        amount = parts[1]
+            if len(parts) != 2:
+                continue
 
-        # 収入判定
-        if amount.startswith("+"):
-            amount = amount.replace("+", "")
-            type_ = "収入"
-        else:
-            type_ = "支出"
+            content = parts[0]
+            amount = parts[1]
 
-        if not amount.isdigit():
-            raise Exception()
+            if amount.startswith("+"):
+                amount = amount.replace("+", "")
+                type_ = "収入"
+            else:
+                type_ = "支出"
 
-        sheet.append_row([
-            str(new_id),
-            today_str,
-            content,
-            amount,
-            type_,
-            ""
-        ])
+            if not amount.isdigit():
+                continue
 
-        reply = f"{content} {amount}円 登録 👍（ID:{new_id}）"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+            sheet.append_row([
+                str(start_id + count),
+                str(today),
+                content,
+                amount,
+                type_,
+                ""
+            ])
+
+            count += 1
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"{count}件登録 👍"))
 
     except:
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="入力形式エラー：ランチ 800 / 給料 +200000"))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="入力エラー"))
